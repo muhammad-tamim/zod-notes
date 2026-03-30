@@ -1,21 +1,69 @@
 <h1 align="center">Zod Notes</h1>
 
-- [Zod:](#zod)
-  - [Basic:](#basic)
+- [Introduction:](#introduction)
+  - [Installation:](#installation)
+  - [Basic Usage:](#basic-usage)
     - [Defining a schema:](#defining-a-schema)
     - [Parsing data:](#parsing-data)
-    - [Handling errors:](#handling-errors)
     - [Inferring types:](#inferring-types)
-  - [Strings Validations:](#strings-validations)
-    - [Number Validations:](#number-validations)
-  - [Type Coercion:](#type-coercion)
+    - [Handling errors:](#handling-errors)
 
 
-# Zod: 
+# Introduction: 
+Zod is a TypeScript-first schema validation library used to define the shapes, validate, and infer types automatically of our data at runtime. TypeScript alone can just do compile time safety and just give us editor level runtime error suggestions, but Zod give us runtime safety + compile time safety (with ts). Zod is often used in scenarios like validating API requests, form inputs, or any other data that needs to be checked for correctness before being processed further. 
 
-Zod is a TypeScript-first schema validation library. We use Zod to validate incoming request body, params, and queries before saving them to the database.
+Without zod, blow code run perfectly and we won't get any error until we compile it with tsc.
 
-## Basic:
+```ts
+type Player = {
+    username: string;
+    xp: number;
+}
+
+const input: Player = { username: "billie", xp: '100' };
+
+console.log(input);
+```
+
+But with zod, now we get editor label error by ts + runtime error by zod: 
+
+```ts
+import * as z from "zod";
+
+const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
+});
+
+type PlayerType = z.infer<typeof PlayerSchema>;
+
+const input: PlayerType = { username: "billie", xp: '100' };
+
+const playerData = PlayerSchema.parse(input);
+
+console.log(playerData);
+```
+
+```js
+ZodError: [
+  {
+    "expected": "number",
+    "code": "invalid_type",
+    "path": [
+      "xp"
+    ],
+    "message": "Invalid input: expected number, received string"
+  }
+]
+```
+
+## Installation: 
+
+```bash
+npm install zod
+```
+
+## Basic Usage:
 
 ### Defining a schema:
 A schema is simply a blueprint that describes what valid data should look like.
@@ -23,9 +71,9 @@ A schema is simply a blueprint that describes what valid data should look like.
 ```ts
 import * as z from "zod"; 
  
-const Player = z.object({ 
-  username: z.string(),
-  xp: z.number()
+const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
 });
 ```
 
@@ -33,156 +81,187 @@ const Player = z.object({
 use `.parse` to validate an schema input. If it's valid, Zod returns a strongly-typed deep clone of the input.
 
 ```ts
-const reqBody = {userName: "Tamim", xp: 100} 
+import * as z from "zod";
 
-Player.parse(reqBody); 
-// => returns { username: "billie", xp: 100 }
+const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
+});
+
+const input = { username: "billie", xp: '100' };
+
+const playerData = PlayerSchema.parse(input);
+
+console.log(playerData);
 ```
 
-### Handling errors:
-When validation fails, the .parse() method will throw a ZodError instance with granular information about the validation issues.
+Note: now zod only give us runtime error, but if we want to get editor label error by ts, if we want editor label error by ts, we need to  use z.infer<> to extract the inferred type from our schema.
+
+
+**Note:** If our schema uses certain asynchronous APIs like async refinements or transforms, we'll need to use the .parseAsync() method instead. 
 
 ```ts
-const reqBody = {userName: 42, xp: "100"} 
-
-try {
-  Player.parse(reqBody);
-} catch(error){
-  if(error instanceof z.ZodError){
-    error.issues; 
-    /* [
-      {
-        expected: 'string',
-        code: 'invalid_type',
-        path: [ 'username' ],
-        message: 'Invalid input: expected string'
-      },
-      {
-        expected: 'number',
-        code: 'invalid_type',
-        path: [ 'xp' ],
-        message: 'Invalid input: expected number'
-      }
-    ] */
-  }
-}
-```
-
-To avoid a try/catch block, you can use the .safeParse() method to get back a plain result object containing either the successfully parsed data or a ZodError.
-
-```ts
-const reqBody = { username: 42, xp: "100" }
-
-const result = Player.safeParse(reqBody);
-if (!result.success) {
-  result.error;   // ZodError instance
-} else {
-  result.data;    // { username: string; xp: number }
-}
+await PlayerSchema.parseAsync(input); 
 ```
 
 ### Inferring types: 
-Zod infers a static type from your schema definitions. You can extract this type with the z.infer<> utility and use it however you like.
+Zod infers static type from our schema definitions as type alias by default. we can extract this type with the z.infer<> utility and use it as a normal type alias.
+
+**Note:** For interface zod doesn't support to inter types, but type alisa are supported.
 
 ```ts
-const Player = z.object({ 
-  username: z.string(),
-  xp: z.number()
+import * as z from "zod";
+
+const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
 });
- 
-// extract the inferred type
-type PlayerType = z.infer<typeof Player>;
- 
-// use it in your code
-const reqBody: PlayerType = { username: "billie", xp: 100 };
+
+type PlayerType = z.infer<typeof PlayerSchema>
+
+const input: PlayerType = { username: "billie", xp: '100' };
+
+const playerData = PlayerSchema.parse(input);
+
+console.log(playerData);
 ```
 
-## Strings Validations: 
-Zod provides a handful of built-in string validation and transform APIs. To perform some common string validations:
+Now we get editor label error by ts + runtime error by zod.
+
+Note: Zod infers static type form our schema definitions as type alias by default, to prove it we can see the below example: 
 
 ```ts
-z.string().max(5);
-z.string().min(5);
-z.string().length(5);
-z.string().regex(/^[a-z]+$/);
-z.string().startsWith("aaa");
-z.string().endsWith("zzz");
-z.string().includes("---");
-z.string().uppercase();
-z.string().lowercase();
+import * as z from "zod";
+
+const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
+});
+
+
+const input = { username: "billie", xp: '100' };
+
+const playerData = PlayerSchema.parse(input);
+
+console.log(playerData);
 ```
 
-To perform some simple string transforms:
+Now hover the input variable on vs code, then we can see the type of input is: 
+
+```
+const input: {
+    username: string;
+    xp: string;
+}
+```
+
+### Handling errors:
+
+```tsx
+import * as z from "zod";
+
+const App = () => {
+
+  const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
+  });
+
+  type PlayerType = z.infer<typeof PlayerSchema>
+
+  const input: PlayerType = { username: "billie", xp: '100' };
+
+  const playerData = PlayerSchema.parse(input);
+
+  console.log(playerData);
+  return (
+    <div>
+    </div>
+  );
+};
+
+export default App;
+```
+
+To prevent our application from breaking, we can use try/catch block for with .parse() to catch the error and handle it gracefully, and if we don't want to use try/catch block, we can use .safeParse().
+
 
 ```ts
-z.string().trim(); // trim whitespace
-z.string().toLowerCase(); // toLowerCase
-z.string().toUpperCase(); // toUpperCase
-z.string().normalize(); // normalize unicode characters
+import * as z from "zod";
+
+const App = () => {
+  const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
+  });
+
+  type PlayerType = z.infer<typeof PlayerSchema>
+
+  const input: PlayerType = { username: "billie", xp: '100' };
+
+  try {
+    const playerData = PlayerSchema.parse(input);
+    console.log(playerData);
+  }
+  catch (error) {
+    if (error instanceof z.ZodError) {
+      console.log(error)
+      console.log(error.issues)
+      console.log(error.issues[0])
+      console.log(error.issues[0].message)
+    }
+  }
+  return (
+    <div>
+      hi
+    </div>
+  );
+};
+
+export default App;
 ```
 
-To validate against some common string formats:
+here, 
+- error: gives the error as ZodError instance, but we can't show it directly by ui for users.
+- error.issues: gives the error as array of objects, each object contains the details of the error.
+- error.issues[0]:  gives the first error object here we can find all commonly used important errors
 
-```ts
-z.email();         // /^(?!\.)(?!.*\.\.)([a-z0-9_'+\-\.]*)[a-z0-9_+-]@([a-z0-9][a-z0-9\-]*\.)+[a-z]{2,}$/i
-z.email({ pattern: /your custom regex here/ });
+![alt text](./assets/images/handling-errors.png) 
 
-z.url();
-z.url({ hostname: /^example\.com$/ });
-z.url({ protocol: /^https$/ });
-z.url({ protocol: /^https?$/, hostname: z.regexes.domain}); 
-// z.regexes.domain = /^([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/
-z.httpUrl();       // http or https URLs only
 
-z.hex();
-z.jwt();
-z.jwt({ alg: "HS256" });
-z.iso.date();
-z.iso.time();
-z.iso.datetime();
-z.iso.duration();
+for .safeParse(): 
+
+```tsx
+import * as z from "zod";
+
+const App = () => {
+  const PlayerSchema = z.object({
+    username: z.string(),
+    xp: z.number()
+  });
+
+  type PlayerType = z.infer<typeof PlayerSchema>
+
+  const input: PlayerType = { username: "billie", xp: '100' };
+
+  const result = PlayerSchema.safeParse(input);
+
+  if (!result.success) {
+    console.log(result.error)
+    console.log(result.error.issues)
+    console.log(result.error.issues[0])
+    console.log(result.error.issues[0].message)
+  } else {
+    console.log(result.data)
+  }
+  return (
+    <div>
+      hi
+    </div>
+  );
+};
+
+export default App;
 ```
 
-### Number Validations: 
-
-```ts
-z.number()
-z.number().gt(5);
-z.number().gte(5);                     // alias .min(5)
-z.number().lt(5);
-z.number().lte(5);                     // alias .max(5)
-z.number().positive();       
-z.number().nonnegative();    
-z.number().negative(); 
-z.number().nonpositive(); 
-z.number().multipleOf(5);              // alias .step(5)
-```
-
-## Type Coercion: 
-For type coercion input data to the appropriate type, use z.coerce instead:
-
-```ts
-z.coercion.string();    // String(input)
-z.coercion.number();    // Number(input)
-z.coercion.boolean();   // Boolean(input)
-z.coercion.bigint();    // BigInt(input)
-```
-
-```ts
-const schema = z.coerce.string();
- 
-schema.parse("tuna");    // => "tuna"
-schema.parse(42);        // => "42"
-schema.parse(true);      // => "true"
-schema.parse(null);      // => "null"
-```
-
-The input type of these coerced schemas is unknown by default. To specify a more specific input type, pass a generic parameter:
-
-```ts
-const A = z.coerce.number();
-type AInput = z.input<typeof A>; // => unknown
- 
-const B = z.coerce.number<number>();
-type BInput = z.input<typeof B>; // => number
-```
+Note: If our schema uses certain asynchronous APIs like async refinements or transforms, we'll need to use the .safeParseAsync() method instead.
