@@ -7,6 +7,7 @@
     - [Parsing data:](#parsing-data)
     - [Inferring types:](#inferring-types)
     - [Handling errors:](#handling-errors)
+      - [Customizing errors:](#customizing-errors)
 - [Defining schemas:](#defining-schemas)
   - [Primitives Types:](#primitives-types)
   - [Coercion:](#coercion)
@@ -301,6 +302,56 @@ export default App;
 ```
 
 Note: If our schema uses certain asynchronous APIs like async refinements or transforms, we'll need to use the .safeParseAsync() method instead.
+
+#### Customizing errors: 
+If we don't like the default error message, Virtually every Zod API accepts an optional error message. so using that we can customize the error message for each schema: 
+
+```ts
+z.string("Not a string!");
+```
+
+This custom error will show up as the message property of any validation issues that originate from this schema: 
+
+```ts
+z.string("Not a string!").parse(12);
+// ❌ throws ZodError {
+//   issues: [
+//     {
+//       expected: 'string',
+//       code: 'invalid_type',
+//       path: [],
+//       message: 'Not a string!'   <-- 👀 custom error message
+//     }
+//   ]
+// }
+```
+
+
+All z functions and schema methods accept custom errors: 
+
+```ts
+z.string("Bad!");
+z.string().min(5, "Too short!");
+z.uuid("Bad UUID!");
+z.iso.date("Bad date!");
+z.array(z.string(), "Not an array!");
+z.array(z.string()).min(5, "Too few items!");
+z.set(z.string(), "Bad set!");
+```
+
+If you prefer, you can pass a params object with an error parameter instead: 
+
+```ts
+z.string({ error: "Bad!" });
+z.string().min(5, { error: "Too short!" });
+z.uuid({ error: "Bad UUID!" });
+z.iso.date({ error: "Bad date!" });
+z.array(z.string(), { error: "Bad array!" });
+z.array(z.string()).min(5, { error: "Too few items!" });
+z.set(z.string(), { error: "Bad set!" });
+```
+
+
 
 # Defining schemas: 
 
@@ -876,4 +927,3 @@ const numberWithCatch = z.number().catch(42);
 numberWithCatch.parse(5); // => 5
 numberWithCatch.parse("tuna"); // => 42
 ```
-
