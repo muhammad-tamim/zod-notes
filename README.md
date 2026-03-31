@@ -1,7 +1,7 @@
 <h1 align="center">Zod Notes</h1>
 
+- [Installation:](#installation)
 - [Introduction:](#introduction)
-  - [Installation:](#installation)
   - [Basic Usage:](#basic-usage)
     - [Defining a schema:](#defining-a-schema)
     - [Parsing data:](#parsing-data)
@@ -44,7 +44,20 @@
     - [.transform():](#transform)
     - [Defaults:](#defaults)
   - [Catch:](#catch)
+- [Example:](#example)
+  - [Form validation:](#form-validation)
+    - [With React + JS:](#with-react--js)
+    - [With React + TS:](#with-react--ts)
+    - [With React + TS + Zod:](#with-react--ts--zod)
+    - [With React + TS + Zod + React Hook Form:](#with-react--ts--zod--react-hook-form)
+  - [Protect backend api with zod + express + ts:](#protect-backend-api-with-zod--express--ts)
 
+
+# Installation: 
+
+```bash
+npm install zod
+```
 
 # Introduction: 
 Zod is a TypeScript-first schema validation library used to define the shapes, validate, and infer types automatically of our data at runtime. TypeScript alone can just do compile time safety and just give us editor level runtime error suggestions, but Zod give us runtime safety + compile time safety (with ts). Zod is often used in scenarios like validating API requests, form inputs, or any other data that needs to be checked for correctness before being processed further. 
@@ -92,12 +105,6 @@ ZodError: [
     "message": "Invalid input: expected number, received string"
   }
 ]
-```
-
-## Installation: 
-
-```bash
-npm install zod
 ```
 
 ## Basic Usage:
@@ -926,4 +933,357 @@ const numberWithCatch = z.number().catch(42);
  
 numberWithCatch.parse(5); // => 5
 numberWithCatch.parse("tuna"); // => 42
+```
+
+# Example: 
+
+## Form validation:
+
+### With React + JS:
+
+```jsx
+import React, { useState } from 'react'
+
+export default function SimpleForm() {
+    const [error, setError] = useState()
+    const [data, setData] = useState({ name: '', age: '' })
+
+
+    const handleSubmit = e => {
+        e.preventDefault()
+
+        const name = e.target.name.value
+        const age = Number(e.target.age.value)
+        const formData = { name, age }
+
+        if (name.length < 3) {
+            return setError("Name must be at least 3 characters")
+        }
+        if (age <= 0) {
+            return setError("Age must be greater than 0")
+        }
+
+        setError(null)
+        setData(formData)
+        e.target.reset()
+    }
+
+    return (
+        <div className="flex justify-center items-center min-h-screen">
+            <form onSubmit={handleSubmit} className="card bg-base-200 w-80 shadow">
+                <div className="card-body space-y-3">
+                    <h2 className="card-title">Simple Form</h2>
+
+                    <input name="name" type="text" placeholder="Name" className="input input-bordered" />
+
+                    <input name="age" type="text" placeholder="Age" className="input input-bordered" />
+
+                    <button className="btn btn-primary">Submit</button>
+
+                    {error && <p className="text-error text-sm">{error}</p>}
+
+                    {data && (<p className="text-success text-sm"> {data.name} ({data.age})</p>)}
+                </div>
+            </form>
+        </div>
+    )
+}
+```
+
+**Problem:**
+
+- No input type validation
+- No runtime validation
+- Massy error handling logic
+
+### With React + TS: 
+
+```tsx
+import { useState } from "react"
+
+
+type FormData = {
+  name: string,
+  age: number
+}
+
+export default function SimpleForm() {
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<FormData | null>(null)
+
+  const handleSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    const form = e.currentTarget
+    const formData = new FormData(form)
+
+    const name = formData.get("name") as string
+    const age = Number(formData.get("age")) as number
+    const formDataObj = { name, age }
+
+    if (name.length < 3) {
+      return setError("Name must be at least 3 characters")
+    }
+    if (age <= 0) {
+      return setError("Age must be greater than 0")
+    }
+
+    setError(null)
+    setData(formDataObj)
+    form.reset()
+  }
+
+  return (
+    <div className="flex justify-center items-center min-h-screen">
+      <form onSubmit={handleSubmit} className="card bg-base-200 w-80 shadow">
+        <div className="card-body space-y-3">
+          <h2 className="card-title">Simple Form</h2>
+
+          <input name="name" type="text" placeholder="Name" className="input input-bordered" />
+
+          <input name="age" type="text" placeholder="Age" className="input input-bordered" />
+
+          <button className="btn btn-primary">Submit</button>
+
+          {error && <p className="text-error text-sm">{error}</p>}
+
+          {data && (<p className="text-success text-sm"> {data.name} ({data.age})</p>)}
+        </div>
+      </form>
+    </div>
+  )
+}
+
+```
+
+**Problem:**
+
+- No runtime validation
+- Massy error handling logic
+
+### With React + TS + Zod: 
+
+```tsx
+import { useState } from "react"
+import * as z from "zod";
+
+const FormSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters"),
+  age: z.coerce.number().positive("Age must be greater than 0")
+})
+
+type FormType = z.infer<typeof FormSchema>
+
+export default function SimpleForm() {
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<FormType | null>(null)
+
+  const handleSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    const form = e.currentTarget
+    const formData = new FormData(form)
+
+    const name = formData.get("name")
+    const age = formData.get("age")
+    const formDataObj = { name, age }
+
+    const result = FormSchema.safeParse(formDataObj)
+
+    if (!result.success) {
+      return setError(result.error.issues[0].message);
+    }
+
+    setError(null)
+    setData(result.data)
+    form.reset()
+  }
+
+  return (
+    <div className="flex justify-center items-center min-h-screen">
+      <form onSubmit={handleSubmit} className="card bg-base-200 w-80 shadow">
+        <div className="card-body space-y-3">
+          <h2 className="card-title">Simple Form</h2>
+
+          <input name="name" type="text" placeholder="Name" className="input input-bordered" />
+
+          <input name="age" type="text" placeholder="Age" className="input input-bordered" />
+
+          <button className="btn btn-primary">Submit</button>
+
+          {error && <p className="text-error text-sm">{error}</p>}
+
+          {data && (<p className="text-success text-sm"> {data.name} ({data.age})</p>)}
+        </div>
+      </form>
+    </div>
+  )
+}
+```
+
+![image](./assets/images/form-validation-with-zod-react-ts.png)
+
+### With React + TS + Zod + React Hook Form: 
+
+```bash
+npm install react-hook-form @hookform/resolvers
+```
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react"
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+
+const FormSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters"),
+  age: z.number().positive("Age must be greater than 0")
+})
+
+type FormType = z.infer<typeof FormSchema>
+
+export default function SimpleForm() {
+  const [data, setData] = useState<FormType | null>(null)
+
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormType>({ resolver: zodResolver(FormSchema) })
+
+  const onSubmit = (formData: FormType) => {
+    setData(formData)
+    reset()
+  }
+
+  return (
+    <div className="flex justify-center items-center min-h-screen">
+      <form onSubmit={handleSubmit(onSubmit)} className="card bg-base-200 w-80 shadow">
+        <div className="card-body space-y-3">
+          <h2 className="card-title">Simple Form</h2>
+
+          <input {...register("name")} type="text" placeholder="Name" className="input input-bordered" />
+
+          <input {...register("age", { valueAsNumber: true })} type="text" placeholder="Age" className="input input-bordered" />
+
+          <button className="btn btn-primary">Submit</button>
+
+          {errors.name && <p className="text-error text-sm">{errors.name.message}</p>}
+          {errors.age && <p className="text-error text-sm">{errors.age.message}</p>}
+
+          {data && (<p className="text-success text-sm"> {data.name} ({data.age})</p>)}
+        </div>
+      </form>
+    </div>
+  )
+}
+```
+
+## Protect backend api with zod + express + ts: 
+
+```ts
+// validation.ts
+
+import { z } from "zod";
+
+export const NoteSchema = z.object({
+    name: z.string().min(1, "Name is required"),
+    description: z.string().min(1, "Description is required"),
+});
+```
+
+```ts
+// index.ts
+
+import express from 'express'
+import cors from 'cors'
+import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb'
+import dotenv from 'dotenv'
+import { NoteSchema } from './validation.js'
+import z from 'zod'
+dotenv.config()
+
+const port = process.env.PORT || 3000
+
+const app = express()
+app.use(cors()) // use cors middleware
+app.use(express.json()) // use express middleware
+
+
+const client = new MongoClient(process.env.MONGODB_URI as string, {
+    serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+    }
+});
+
+async function run() {
+
+    const notesCollection = client.db("notesDB").collection('notes')
+
+    app.post('/note', async (req, res) => {
+        try {
+            // ✅ Validate input
+            const validatedData = NoteSchema.parse(req.body);
+            const result = await notesCollection.insertOne(validatedData);
+            res.send(result);
+        }
+        catch (err) {
+            if (err instanceof z.ZodError) {
+                return res.status(400).send({
+                    message: err.issues[0]?.message || "Invalid input",
+                });
+            }
+        }
+    });
+
+
+    // GET all notes
+    app.get('/notes', async (req, res) => {
+        const notes = await notesCollection.find({}).toArray();
+        res.send(notes);
+    });
+
+    // GET a single note
+    app.get('/note/:id', async (req, res) => {
+        const id = req.params.id
+        const filter = { _id: new ObjectId(id) }
+        const result = await notesCollection.findOne(filter);
+        res.send(result);
+    });
+
+
+    // PATCH - partial update
+    app.patch('/note/:id', async (req, res) => {
+        const id = req.params.id
+        const filter = { _id: new ObjectId(id) }
+        const updatedData = req.body;
+        const updatedDoc = {
+            $set: {
+                name: updatedData.name,
+                description: updatedData.description
+            }
+        }
+
+        const result = await notesCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+    });
+
+    // DELETE
+    app.delete('/note/:id', async (req, res) => {
+        const result = await notesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+        res.send(result);
+    });
+
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+}
+run().catch(console.dir);
+
+
+app.get('/', (req, res) => {
+    res.send('Hello World!')
+})
+
+app.listen(port, () => {
+    console.log(`Example app listening on port ${port}`)
+})
 ```
