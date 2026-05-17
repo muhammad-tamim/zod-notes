@@ -51,6 +51,7 @@
     - [With React + TS + Zod:](#with-react--ts--zod)
     - [With React + TS + Zod + React Hook Form:](#with-react--ts--zod--react-hook-form)
   - [Protect backend api with zod + express + ts:](#protect-backend-api-with-zod--express--ts)
+- [Example:](#example-1)
 
 
 # Installation: 
@@ -1287,3 +1288,227 @@ app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 })
 ```
+
+# Example: 
+
+- Setup: 
+
+```bash
+npm init -y
+npm i express cors mongodb dotenv zod
+npm i -D typescript tsx @types/node @types/express @types/mongodb @types/cors 
+npx tsc --init
+```
+
+
+```json
+// tsconfig.json 
+{
+  // Visit https://aka.ms/tsconfig to read more about this file
+  "compilerOptions": {
+    // File Layout
+    "rootDir": "./", // un-commit it, 
+    "outDir": "./dist", // un-commit it
+    // Environment Settings
+    // See also https://aka.ms/tsconfig/module
+    "module": "nodenext",
+    "target": "esnext",
+    // For nodejs:
+    "lib": [
+      "esnext"
+    ],
+    "types": [
+      "node"
+    ],
+    // and npm install -D @types/node
+    // Other Outputs
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    // Style Options
+    // "noImplicitReturns": true,
+    // "noImplicitOverride": true,
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    // "noFallthroughCasesInSwitch": true,
+    // "noPropertyAccessFromIndexSignature": true,
+    // Recommended Options
+    "strict": true,
+    // "jsx": "react-jsx", // commit it
+    // "verbatimModuleSyntax": true, // commit it
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+  }
+}
+```
+
+package.json:
+```json
+{
+  "name": "zod-backeidn",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/mongodb": "^4.0.6",
+    "@types/node": "^25.5.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "mongodb": "^7.1.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "zod": "^4.3.6"
+  }
+}
+```
+
+- code: 
+
+```ts
+// note.validation.ts
+import z from "zod";
+
+export const createNoteSchema = z.object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    description: z.string().min(5, "Description must be at least 5 characters"),
+});
+
+export const updateNoteSchema = createNoteSchema.partial();
+```
+
+```ts
+// index.ts
+// index.ts
+
+import express from 'express'
+import cors from 'cors'
+import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb'
+import dotenv from 'dotenv'
+import { createNoteSchema, updateNoteSchema } from './note.validation'
+dotenv.config()
+
+const port = process.env.PORT || 3000
+
+const app = express()
+app.use(cors()) // use cors middleware
+app.use(express.json()) // use express middleware
+
+
+const client = new MongoClient(process.env.MONGODB_URI as string, {
+    serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+    }
+});
+
+async function run() {
+
+    const notesCollection = client.db("notesDB").collection('notes')
+
+
+    // POST - create new note
+    app.post('/note', async (req, res) => {
+
+        const validation = createNoteSchema.safeParse(req.body);
+
+        if (!validation.success) {
+            return res.status(400).send({
+                success: false,
+                errors: validation.error.issues
+            });
+        }
+
+
+        const result = await notesCollection.insertOne(validation.data);
+
+        res.send(result);
+    });
+
+
+    // GET all notes
+    app.get('/notes', async (req, res) => {
+        const notes = await notesCollection.find({}).toArray();
+        res.send(notes);
+    });
+
+    // GET a single note
+    app.get('/note/:id', async (req, res) => {
+        const id = req.params.id
+        const filter = { _id: new ObjectId(id) }
+        const result = await notesCollection.findOne(filter);
+        res.send(result);
+    });
+
+
+    // PATCH - partial update
+    app.patch('/note/:id', async (req, res) => {
+
+        const validation = updateNoteSchema.safeParse(req.body);
+
+        if (!validation.success) {
+            return res.status(400).send({
+                success: false,
+                errors: validation.error.flatten()
+            });
+        }
+
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) }
+        // const updateData = req.body;
+        // const updateDoc = {
+        //     $set: {
+        //         name: updatedData.name,
+        //         description: updatedData.description
+        //     }
+        // }
+        // or since we already have zod update schema
+        const updateData = validation.data
+        const updateDoc = {
+            $set: updateData
+        }
+
+        const result = await notesCollection.updateOne(filter, updateDoc);
+        res.send(result);
+    });
+
+    // DELETE
+    app.delete('/note/:id', async (req, res) => {
+        const result = await notesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+        res.send(result);
+    });
+
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+}
+run().catch(console.dir);
+
+
+app.get('/', (req, res) => {
+    res.send('Hello World!')
+})
+
+app.listen(port, () => {
+    console.log(`Example app listening on port ${port}`)
+})
+```
+
